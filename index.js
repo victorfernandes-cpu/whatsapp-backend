@@ -1,9 +1,10 @@
 const express = require('express');
+const axios = require('axios'); // 🔹 ADICIONADO
 const app = express();
 
 app.use(express.json());
 
-// 🔹 VERIFICAÇÃO DO WEBHOOK (GET)
+// 🔹 VERIFICAÇÃO DO WEBHOOK (GET) — NÃO MEXE
 app.get('/webhook', (req, res) => {
   const verifyToken = process.env.VERIFY_TOKEN;
 
@@ -19,13 +20,46 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// 🔹 RECEBER MENSAGENS (POST) — NÃO VALIDAR TOKEN
-app.post('/webhook', (req, res) => {
-  console.log('Webhook recebido:');
-  console.log(JSON.stringify(req.body, null, 2));
+// 🔹 RECEBER E RESPONDER MENSAGENS (POST)
+app.post('/webhook', async (req, res) => {
+  try {
+    const entry = req.body.entry?.[0];
+    const changes = entry?.changes?.[0];
+    const message = changes?.value?.messages?.[0];
 
-  // Sempre responder 200
-  res.sendStatus(200);
+    // Se não for mensagem, ignora
+    if (!message || !message.text) {
+      return res.sendStatus(200);
+    }
+
+    const from = message.from;        // número do usuário
+    const text = message.text.body;   // texto recebido
+
+    console.log('Mensagem recebida:', text);
+
+    // 🔹 RESPOSTA AUTOMÁTICA
+    const resposta = `Olá! Recebi sua mensagem: ${text}`;
+
+    await axios.post(
+      `https://graph.facebook.com/v19.0/${process.env.PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to: from,
+        text: { body: resposta }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    res.sendStatus(200);
+  } catch (erro) {
+    console.error('Erro ao responder:', erro.response?.data || erro.message);
+    res.sendStatus(200);
+  }
 });
 
 const PORT = process.env.PORT || 10000;
